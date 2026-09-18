@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import com.example.energiainteligente.ui.theme.EnergiaInteligenteTheme
 import java.util.Locale
 
@@ -82,7 +84,7 @@ fun Home() {
                 value = nomeAparelho,
                 onValueChange = { novoTexto -> nomeAparelho = novoTexto },
                 label = { Text("Nome do aparelho") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -91,7 +93,8 @@ fun Home() {
                 value = potencia,
                 onValueChange = { novoTexto -> potencia = novoTexto },
                 label = { Text("Potência (W)") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number)
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -100,7 +103,8 @@ fun Home() {
                 value = horasPorDia,
                 onValueChange = { novoTexto -> horasPorDia = novoTexto },
                 label = { Text("Horas por dia") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
