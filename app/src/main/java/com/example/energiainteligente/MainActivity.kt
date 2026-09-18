@@ -61,7 +61,7 @@ fun Home() {
             ) {
                 Text(
                     text = "Energia Inteligente",
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(16.dp).padding(top = 15.dp),
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp
@@ -134,7 +134,7 @@ fun Home() {
                         resultadoTexto = "Por favor, insira valores válidos para potência e horas."
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
             ) {
                 Text(text = "Calcular")
             }
