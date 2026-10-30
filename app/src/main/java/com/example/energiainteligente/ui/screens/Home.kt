@@ -135,7 +135,7 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                // Badge de Bandeira Verde
+                // Badge da Bandeira Vigente
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
                     shape = RoundedCornerShape(50)
@@ -152,7 +152,7 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Bandeira Verde",
+                            text = bandeira.nome,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary

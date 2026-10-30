@@ -20,11 +20,21 @@ class AneelRepository {
             val response = api.obterBandeiraVigente()
             // Normaliza a string para evitar problemas com maiúsculas/minúsculas
             when (response.tipo.uppercase()) {
-                "AMARELO", "1" -> BandeiraTarifaria.amarela()
-                "VERMELHA_P1", "2" -> BandeiraTarifaria.vermelhaP1()
-                "VERMELHA_P2", "3" -> BandeiraTarifaria.vermelhaP2()
-                "VERDE", "0" -> BandeiraTarifaria.verde()
-                else -> BandeiraTarifaria.verde() // Fallback padrão
+                "AMARELO", "1" -> {
+                    BandeiraTarifaria.amarela()
+                }
+                "VERMELHA_P1", "2" -> {
+                    BandeiraTarifaria.vermelhaP1()
+                }
+                "VERMELHA_P2", "3" -> {
+                    BandeiraTarifaria.vermelhaP2()
+                }
+                "VERDE", "0" -> {
+                    BandeiraTarifaria.verde()
+                }
+                else -> {
+                    BandeiraTarifaria.verde() // Fallback padrão
+                }
             }
         } catch (e: Exception) {
             // Em caso de falha de rede/offline, fallback seguro para Bandeira Verde
