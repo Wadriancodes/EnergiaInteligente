@@ -1,0 +1,1 @@
+INSERT INTO distribuidora (nome, uf) VALUES ('Equatorial Pará', 'PA');
