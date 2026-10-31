@@ -32,13 +32,8 @@ class MainActivity : ComponentActivity() {
 fun AppNavigation() {
     val navController = rememberNavController()
 
-// Lista pré-populada com os 3 eletrodomésticos do protótipo Figma
     val listaAparelhos = remember {
-        mutableStateListOf(
-            Aparelho(nome = "Geladeira", potenciaWatts = 127.0, horasPorDia = 24.0),
-            Aparelho(nome = "Ar-condicionado", potenciaWatts = 900.0, horasPorDia = 8.0),
-            Aparelho(nome = "PC Gamer", potenciaWatts = 250.0, horasPorDia = 6.0)
-        )
+        mutableStateListOf<Aparelho>()
     }
 
     NavHost(

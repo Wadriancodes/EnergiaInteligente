@@ -15,6 +15,11 @@ import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -22,7 +27,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.energiainteligente.AneelRepository
 import com.example.energiainteligente.Aparelho
+import com.example.energiainteligente.BandeiraTarifaria
+import com.example.energiainteligente.TarifaDistribuidora
 import java.util.Locale
 
 @Composable
@@ -30,9 +38,22 @@ fun HomeScreen(
     aparelhos: List<Aparelho>,
     onAdicionarAparelhoClick: () -> Unit
 ) {
-    val precoKWh = 0.97830
+    val repository = remember { AneelRepository() }
+
+    // Estados carregados assincronamente da API REST ANEEL
+    var bandeira by remember { mutableStateOf(BandeiraTarifaria.verde()) }
+    var tarifa by remember { mutableStateOf(TarifaDistribuidora("PA", "Equatorial Pará", 0.97830)) }
+
+    // Requisição em background para buscar dados da API ANEEL
+    LaunchedEffect(Unit) {
+        bandeira = repository.obterBandeiraVigente()
+        tarifa = repository.obterTarifaPorUF("PA")
+    }
+
     val consumoTotalKWh = aparelhos.sumOf { it.consumoMensalKWh }
-    val custoTotalEst = aparelhos.sumOf { it.calcularCustoMensal(precoKWh) }
+    val custoTotalEst = aparelhos.sumOf {
+        it.calcularCustoMensal(tarifa.tarifaBaseKWh, bandeira.adicionalPorKWh)
+    }
 
     val ptBr = Locale("pt", "BR")
 
@@ -114,7 +135,7 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                // Badge de Bandeira Verde
+                // Badge da Bandeira Vigente
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
                     shape = RoundedCornerShape(50)
@@ -131,7 +152,7 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Bandeira Verde",
+                            text = bandeira.nome,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -281,7 +302,7 @@ fun HomeScreen(
 
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text(
-                                        text = String.format(ptBr, "R$ %.2f", aparelho.calcularCustoMensal(precoKWh)),
+                                        text = String.format(ptBr, "R$ %.2f", aparelho.calcularCustoMensal(tarifa.tarifaBaseKWh, bandeira.adicionalPorKWh)),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp,
                                         color = MaterialTheme.colorScheme.primary
