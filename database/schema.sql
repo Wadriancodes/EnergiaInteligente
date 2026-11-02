@@ -1,4 +1,4 @@
-*** Tabela 1 distribuidora
+-- Tabela 1 distribuidora
 DROP TABLE IF EXISTS distribuidora;
 
 CREATE TABLE distribuidora (
@@ -8,9 +8,9 @@ CREATE TABLE distribuidora (
     UNIQUE (nome, uf)
 );
 
-*** tabela 2: catalogo_aparelho
+-- Tabela 2: catalogo_aparelho
 
-DROP TABLE IF EXISTS catalogo_aparelho
+DROP TABLE IF EXISTS catalogo_aparelho;
 
 CREATE TABLE catalogo_aparelho(
     id_catalogo   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

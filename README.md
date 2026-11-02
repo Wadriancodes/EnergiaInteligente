@@ -48,58 +48,77 @@ O banco de dados foi projetado para suportar histórico de consumo e catálogo d
 
 ## 🗄️ Banco de Dados
 
-O Energia Inteligente utiliza **Oracle Database XE** como SGBD (com **Oracle APEX/ORDS** como opção para expor os dados via REST). O modelo suporta o cálculo financeiro do consumo (TE, TUSD e tributos), o histórico mensal de consumo e um catálogo de aparelhos sugeridos.
+O Energia Inteligente usa **PostgreSQL** hospedado no **Supabase**, que também fornece a autenticação (Supabase Auth) e uma API REST sobre as tabelas. O modelo suporta o cálculo financeiro do consumo (tarifa base, bandeira tarifária e tributos), o histórico mensal de consumo e um catálogo de aparelhos sugeridos.
+
+> 🚧 Modelo em construção. Tabelas marcadas com ⚠️ ainda precisam ser conferidas com o `database/schema.sql`.
 
 ### Modelo Entidade-Relacionamento
 
 ```mermaid
 erDiagram
-    DISTRIBUIDORA ||--|{ TARIFA_HISTORICO : possui
-    DISTRIBUIDORA ||--o{ USUARIO : atende
+    DISTRIBUIDORA |o--o{ USUARIO : atende
+    DISTRIBUIDORA ||--o{ TARIFA_HISTORICO : possui
     USUARIO ||--o{ APARELHO_USUARIO : cadastra
     USUARIO ||--o{ CONSUMO_HISTORICO : registra
-    CATALOGO_APARELHO ||--o{ APARELHO_USUARIO : baseia
+    CATALOGO_APARELHO |o--o{ APARELHO_USUARIO : baseia
+    BANDEIRA_TARIFARIA ||--o{ CONSUMO_HISTORICO : aplicada_em
+    TARIFA_HISTORICO |o--o{ CONSUMO_HISTORICO : usada_em
 
     DISTRIBUIDORA {
-        NUMBER id_distribuidora PK
-        VARCHAR2 nome
-        CHAR uf
-    }
-    TARIFA_HISTORICO {
-        NUMBER id_tarifa PK
-        NUMBER id_distribuidora FK
-        NUMBER valor_te
-        NUMBER valor_tusd
-        NUMBER icms
-    }
-    USUARIO {
-        NUMBER id_usuario PK
-        NUMBER id_distribuidora FK
-        VARCHAR2 nome
-        VARCHAR2 email
-        NUMBER meta_kwh
-        NUMBER meta_reais
+        int id_distribuidora PK
+        text nome
+        char uf
     }
     CATALOGO_APARELHO {
-        NUMBER id_catalogo PK
-        VARCHAR2 nome
-        VARCHAR2 categoria
-        NUMBER potencia_media_w
+        int id_catalogo PK
+        text nome
+        text categoria
+        numeric potencia_media_w
+    }
+    BANDEIRA_TARIFARIA {
+        text tipo PK
+        text nome
+        numeric adicional_por_kwh
+        text descricao
+        timestamptz updated_at
+    }
+    USUARIO {
+        uuid id_usuario PK
+        uuid id_distribuidora FK
+        text nome
+        numeric meta_kwh
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    TARIFA_HISTORICO {
+        int id_tarifa PK
+        int id_distribuidora FK
+        numeric tarifa_base_kwh
+        date vigencia_inicio
+        date vigencia_fim
+        timestamptz created_at
+        timestamptz updated_at
     }
     APARELHO_USUARIO {
-        NUMBER id_aparelho PK
-        NUMBER id_usuario FK
-        NUMBER id_catalogo FK
-        VARCHAR2 nome_personalizado
-        NUMBER potencia_w
-        NUMBER horas_uso_diario
+        uuid id_aparelho PK
+        uuid id_usuario FK
+        int id_catalogo FK
+        text nome_personalizado
+        numeric potencia_w
+        numeric horas_uso_diario
+        timestamptz created_at
+        timestamptz updated_at
     }
     CONSUMO_HISTORICO {
-        NUMBER id_consumo PK
-        NUMBER id_usuario FK
-        DATE mes_ano
-        NUMBER consumo_kwh
-        NUMBER custo_estimado_reais
+        int id_consumo PK
+        uuid id_usuario FK
+        date mes_referencia
+        numeric consumo_kwh
+        numeric custo_total
+        text tipo_bandeira FK
+        int id_tarifa FK
+        timestamptz created_at
+        timestamptz updated_at
     }
 ```
 
@@ -107,73 +126,106 @@ erDiagram
 
 | Relação | Cardinalidade | Descrição |
 |---|---|---|
-| Distribuidora → Tarifa_Historico | 1:N | Cada distribuidora possui várias versões de tarifa ao longo do tempo |
-| Distribuidora → Usuario | 1:N | Uma distribuidora atende vários usuários (definida pela UF/região) |
+| Distribuidora → Tarifa_Historico | 1:N | Cada distribuidora tem várias tarifas ao longo do tempo |
+| Distribuidora → Usuario | 1:N (opcional) | Uma distribuidora atende vários usuários; o usuário pode ainda não ter escolhido uma |
 | Usuario → Aparelho_Usuario | 1:N | O usuário cadastra seus eletrodomésticos |
 | Usuario → Consumo_Historico | 1:N | Um registro de consumo por mês para cada usuário |
-| Catalogo_Aparelho → Aparelho_Usuario | 1:N | O aparelho do usuário pode ser baseado em um item do catálogo (opcional) |
+| Catalogo_Aparelho → Aparelho_Usuario | 1:N (opcional) | O aparelho do usuário pode ser baseado em um item do catálogo |
+| Bandeira_Tarifaria → Consumo_Historico | 1:N | Cada mês registra a bandeira vigente |
+| Tarifa_Historico → Consumo_Historico | 1:N (opcional) | Cada mês registra qual tarifa foi usada no cálculo |
 
 ### Dicionário de dados
 
-#### `DISTRIBUIDORA`
-| Coluna | Tipo Oracle | Restrições | Descrição |
+#### `distribuidora` ⚠️
+Distribuidoras de energia por estado (ex.: Equatorial Pará, PA). Colunas a conferir com o `schema.sql`.
+
+#### `catalogo_aparelho` ⚠️
+Catálogo de aparelhos sugeridos (ex.: Geladeira, Cozinha, 150 W). Colunas a conferir com o `schema.sql`.
+
+#### `bandeira_tarifaria`
+| Coluna | Tipo | Restrições | Descrição |
 |---|---|---|---|
-| `id_distribuidora` | `NUMBER` (IDENTITY) | PK | Identificador |
-| `nome` | `VARCHAR2(100)` | NOT NULL | Ex.: Equatorial Pará |
-| `uf` | `CHAR(2)` | NOT NULL | Estado de atuação |
+| `tipo` | `TEXT` | PK, CHECK (`VERDE`, `AMARELA`, `VERMELHA_P1`, `VERMELHA_P2`) | Tipo da bandeira |
+| `nome` | `TEXT` | NOT NULL | Nome de exibição |
+| `adicional_por_kwh` | `NUMERIC(8,5)` | NOT NULL, `>= 0` | Adicional em R$/kWh |
+| `descricao` | `TEXT` | | Texto explicativo |
+| `updated_at` | `TIMESTAMPTZ` | default `now()` | Última alteração |
 
-#### `TARIFA_HISTORICO`
-| Coluna | Tipo Oracle | Restrições | Descrição |
+#### `usuario`
+| Coluna | Tipo | Restrições | Descrição |
 |---|---|---|---|
-| `id_tarifa` | `NUMBER` (IDENTITY) | PK | Identificador |
-| `id_distribuidora` | `NUMBER` | FK, NOT NULL | Distribuidora da tarifa |
-| `valor_te` | `NUMBER(10,6)` | NOT NULL | Tarifa de Energia (R$/kWh) |
-| `valor_tusd` | `NUMBER(10,6)` | NOT NULL | Tarifa de Uso do Sistema de Distribuição (R$/kWh) |
-| `icms` | `NUMBER(5,2)` | NOT NULL | Alíquota de ICMS (%) |
-| *bandeira* | `VARCHAR2(20)` | *(planejado)* | Bandeira tarifária vigente |
-| *pis_cofins* | `NUMBER(5,2)` | *(planejado)* | Alíquotas de PIS/COFINS (%) |
-| *vigencia_inicio* | `DATE` | *(planejado)* | Data de início da vigência |
+| `id_usuario` | `UUID` | PK | Mesmo id do login no Supabase Auth |
+| `nome` | `TEXT` | | Nome do usuário |
+| `meta_kwh` | `NUMERIC(10,2)` | `>= 0` | Meta mensal de consumo (kWh) |
+| `id_distribuidora` | FK | `ON DELETE SET NULL` | Distribuidora que atende o usuário |
+| `created_at`, `updated_at` | `TIMESTAMPTZ` | | Controle de criação e alteração |
 
-#### `USUARIO`
-| Coluna | Tipo Oracle | Restrições | Descrição |
+#### `tarifa_historico`
+| Coluna | Tipo | Restrições | Descrição |
 |---|---|---|---|
-| `id_usuario` | `NUMBER` (IDENTITY) | PK | Identificador |
-| `id_distribuidora` | `NUMBER` | FK | Distribuidora que atende o usuário |
-| `nome` | `VARCHAR2(100)` | NOT NULL | Nome do usuário |
-| `email` | `VARCHAR2(150)` | NOT NULL, UNIQUE | E-mail de login |
-| `meta_kwh` | `NUMBER(10,2)` | | Meta mensal de consumo (kWh) |
-| `meta_reais` | `NUMBER(10,2)` | | Meta mensal de gasto (R$) |
-| *senha_hash* | `VARCHAR2(255)` | *(planejado)* | Hash da senha (nunca em texto puro) |
+| `id_tarifa` | identity | PK | Identificador |
+| `id_distribuidora` | FK | `ON DELETE CASCADE` | Distribuidora da tarifa |
+| `tarifa_base_kwh` | `NUMERIC(8,5)` | `>= 0` | Tarifa base em R$/kWh |
+| `vigencia_inicio` | `DATE` | | Início da vigência |
+| `vigencia_fim` | `DATE` | NULL = em vigor; `fim >= início` | Fim da vigência |
+| `created_at`, `updated_at` | `TIMESTAMPTZ` | | Controle de criação e alteração |
 
-#### `CATALOGO_APARELHO`
-| Coluna | Tipo Oracle | Restrições | Descrição |
+#### `aparelho_usuario`
+| Coluna | Tipo | Restrições | Descrição |
 |---|---|---|---|
-| `id_catalogo` | `NUMBER` (IDENTITY) | PK | Identificador |
-| `nome` | `VARCHAR2(100)` | NOT NULL | Ex.: Geladeira, Ar-condicionado |
-| `categoria` | `VARCHAR2(50)` | NOT NULL | Categoria do aparelho |
-| `potencia_media_w` | `NUMBER(8,2)` | NOT NULL | Potência média sugerida (W) |
+| `id_aparelho` | `UUID` | PK, default `gen_random_uuid()` | Identificador |
+| `id_usuario` | FK | `ON DELETE CASCADE` | Dono do aparelho |
+| `id_catalogo` | FK | `ON DELETE SET NULL` | Item do catálogo usado como base |
+| `nome_personalizado` | `TEXT` | | Nome dado pelo usuário |
+| `potencia_w` | `NUMERIC(10,2)` | `> 0` | Potência (W) |
+| `horas_uso_diario` | `NUMERIC(4,1)` | entre 0 e 24 | Horas de uso por dia |
+| `created_at`, `updated_at` | `TIMESTAMPTZ` | | Controle de criação e alteração |
 
-#### `APARELHO_USUARIO`
-| Coluna | Tipo Oracle | Restrições | Descrição |
+#### `consumo_historico`
+| Coluna | Tipo | Restrições | Descrição |
 |---|---|---|---|
-| `id_aparelho` | `NUMBER` (IDENTITY) | PK | Identificador |
-| `id_usuario` | `NUMBER` | FK, NOT NULL | Dono do aparelho |
-| `id_catalogo` | `NUMBER` | FK, NULL | Item do catálogo usado como base |
-| `nome_personalizado` | `VARCHAR2(100)` | NOT NULL | Nome dado pelo usuário |
-| `potencia_w` | `NUMBER(8,2)` | NOT NULL, `> 0` | Potência do aparelho (W) |
-| `horas_uso_diario` | `NUMBER(2)` | NOT NULL, `0–24` | Horas de uso por dia |
+| `id_consumo` | identity | PK | Identificador |
+| `id_usuario` | FK | `ON DELETE CASCADE` | Usuário do registro |
+| `mes_referencia` | `DATE` | sempre dia 1 | Mês de referência |
+| `consumo_kwh` | `NUMERIC(10,2)` | `>= 0` | Consumo no mês (kWh) |
+| `custo_total` | `NUMERIC(10,2)` | `>= 0` | Custo da fatura (R$) |
+| `tipo_bandeira` | FK | | Bandeira vigente no mês |
+| `id_tarifa` | FK | `ON DELETE SET NULL` | Tarifa usada no cálculo |
+| `created_at`, `updated_at` | `TIMESTAMPTZ` | | Controle de criação e alteração |
 
-#### `CONSUMO_HISTORICO`
-| Coluna | Tipo Oracle | Restrições | Descrição |
-|---|---|---|---|
-| `id_consumo` | `NUMBER` (IDENTITY) | PK | Identificador |
-| `id_usuario` | `NUMBER` | FK, NOT NULL | Usuário do registro |
-| `mes_ano` | `DATE` | NOT NULL | Primeiro dia do mês de referência |
-| `consumo_kwh` | `NUMBER(10,2)` | NOT NULL | Consumo no mês (kWh) |
-| `custo_estimado_reais` | `NUMBER(10,2)` | NOT NULL | Custo estimado da fatura (R$) |
+`UNIQUE (id_usuario, mes_referencia)` impede dois registros do mesmo mês para o mesmo usuário.
 
-> Restrição sugerida: `UNIQUE (id_usuario, mes_ano)` para impedir dois registros do mesmo mês para o mesmo usuário.
+### Regras de negócio
 
+- **Consumo mensal do aparelho (kWh)** = `potencia_w × horas_uso_diario × dias_no_mês ÷ 1000`
+- **Custo estimado (R$)** = `consumo_kwh × (tarifa_base + adicional da bandeira)`, acrescido de tributos. O ICMS ainda é calculado no app (decisão em aberto).
+- Valores monetários e tarifas usam `NUMERIC(p,s)`, e não `FLOAT`, para evitar erros de arredondamento.
+- O **ranking dos "vilões"** é calculado pela participação percentual de cada aparelho no consumo total do usuário.
+- **Senhas não ficam em tabelas do projeto**: o login é feito pelo Supabase Auth.
+
+### Convenções
+
+- Nomes de tabelas e colunas em `snake_case`
+- Chaves primárias numéricas: `GENERATED ALWAYS AS IDENTITY`; usuários e aparelhos do usuário usam `UUID`
+- Datas e horas com fuso: `TIMESTAMPTZ`
+- Colunas `updated_at` preenchidas por trigger, para apoiar a sincronização com o Room
+
+### Scripts
+
+```
+database/
+├── schema.sql   # estrutura: DROP TABLE e CREATE TABLE
+└── seed.sql     # dados iniciais: distribuidoras, bandeiras, tarifas, catálogo
+```
+
+Para recriar o banco em um PostgreSQL local (o `schema.sql` deve rodar antes do `seed.sql`):
+
+```bash
+psql -U postgres -d energia_teste -f database/schema.sql
+psql -U postgres -d energia_teste -f database/seed.sql
+```
+
+No Supabase, os mesmos arquivos podem ser executados pelo SQL Editor.
 ### Regras de negócio
 
 - **Consumo mensal do aparelho (kWh)** = `potencia_w × horas_uso_diario × dias_no_mês ÷ 1000`
