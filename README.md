@@ -42,38 +42,49 @@ graph TD
 
 ---
 
-##  Modelo de Dados (ER)
 
-O banco de dados foi projetado para suportar histórico de consumo e catálogo de aparelhos sugeridos:
+## Banco de Dados
 
-## 🗄️ Banco de Dados
+O banco é **PostgreSQL**, hospedado no **Supabase**. O app Android não se conecta direto ao banco: ele usa a API e o login (Auth) do Supabase, e as regras de acesso (Row Level Security) ficam no próprio banco. Os scripts estão na pasta `database/`.
 
-O Energia Inteligente usa **PostgreSQL** hospedado no **Supabase**, que também fornece a autenticação (Supabase Auth) e uma API REST sobre as tabelas. O modelo suporta o cálculo financeiro do consumo (tarifa base, bandeira tarifária e tributos), o histórico mensal de consumo e um catálogo de aparelhos sugeridos.
+### Arquivos
 
-> 🚧 Modelo em construção. Tabelas marcadas com ⚠️ ainda precisam ser conferidas com o `database/schema.sql`.
+| Arquivo | O que tem | Onde rodar |
+|---|---|---|
+| `database/schema.sql` | Estrutura: 7 tabelas, função e triggers de `updated_at`, índices | Qualquer PostgreSQL |
+| `database/seed.sql` | Dados de referência: distribuidora, bandeiras, tarifa, catálogo de aparelhos | Qualquer PostgreSQL |
+| `database/supabase.sql` | Específico do Supabase: ligação com `auth.users`, RLS, permissões, criação automática do usuário no cadastro | Só no Supabase |
 
-### Modelo Entidade-Relacionamento
+**Ordem para recriar o banco**
+
+- PostgreSQL local: `schema.sql` e depois `seed.sql`.
+- Supabase (SQL Editor): `schema.sql`, `seed.sql` e `supabase.sql`.
+
+> O `schema.sql` começa com `DROP TABLE`, então **apaga os dados**. Não rodar de novo no Supabase quando já houver usuários reais.
+
+### Diagrama ER
 
 ```mermaid
 erDiagram
-    DISTRIBUIDORA |o--o{ USUARIO : atende
     DISTRIBUIDORA ||--o{ TARIFA_HISTORICO : possui
+    DISTRIBUIDORA |o--o{ USUARIO : atende
     USUARIO ||--o{ APARELHO_USUARIO : cadastra
     USUARIO ||--o{ CONSUMO_HISTORICO : registra
     CATALOGO_APARELHO |o--o{ APARELHO_USUARIO : baseia
-    BANDEIRA_TARIFARIA ||--o{ CONSUMO_HISTORICO : aplicada_em
-    TARIFA_HISTORICO |o--o{ CONSUMO_HISTORICO : usada_em
+    BANDEIRA_TARIFARIA ||--o{ CONSUMO_HISTORICO : classifica
+    TARIFA_HISTORICO |o--o{ CONSUMO_HISTORICO : aplicada
 
     DISTRIBUIDORA {
-        int id_distribuidora PK
+        bigint id_distribuidora PK
         text nome
         char uf
     }
     CATALOGO_APARELHO {
-        int id_catalogo PK
+        bigint id_catalogo PK
         text nome
         text categoria
-        numeric potencia_media_w
+        numeric potencia_w
+        numeric horas_uso_sugerido
     }
     BANDEIRA_TARIFARIA {
         text tipo PK
@@ -84,15 +95,15 @@ erDiagram
     }
     USUARIO {
         uuid id_usuario PK
-        uuid id_distribuidora FK
         text nome
         numeric meta_kwh
+        bigint id_distribuidora FK
         timestamptz created_at
         timestamptz updated_at
     }
     TARIFA_HISTORICO {
-        int id_tarifa PK
-        int id_distribuidora FK
+        bigint id_tarifa PK
+        bigint id_distribuidora FK
         numeric tarifa_base_kwh
         date vigencia_inicio
         date vigencia_fim
@@ -102,7 +113,7 @@ erDiagram
     APARELHO_USUARIO {
         uuid id_aparelho PK
         uuid id_usuario FK
-        int id_catalogo FK
+        bigint id_catalogo FK
         text nome_personalizado
         numeric potencia_w
         numeric horas_uso_diario
@@ -110,153 +121,125 @@ erDiagram
         timestamptz updated_at
     }
     CONSUMO_HISTORICO {
-        int id_consumo PK
+        bigint id_consumo PK
         uuid id_usuario FK
         date mes_referencia
         numeric consumo_kwh
         numeric custo_total
         text tipo_bandeira FK
-        int id_tarifa FK
+        bigint id_tarifa FK
         timestamptz created_at
         timestamptz updated_at
     }
 ```
 
-### Relacionamentos
-
-| Relação | Cardinalidade | Descrição |
-|---|---|---|
-| Distribuidora → Tarifa_Historico | 1:N | Cada distribuidora tem várias tarifas ao longo do tempo |
-| Distribuidora → Usuario | 1:N (opcional) | Uma distribuidora atende vários usuários; o usuário pode ainda não ter escolhido uma |
-| Usuario → Aparelho_Usuario | 1:N | O usuário cadastra seus eletrodomésticos |
-| Usuario → Consumo_Historico | 1:N | Um registro de consumo por mês para cada usuário |
-| Catalogo_Aparelho → Aparelho_Usuario | 1:N (opcional) | O aparelho do usuário pode ser baseado em um item do catálogo |
-| Bandeira_Tarifaria → Consumo_Historico | 1:N | Cada mês registra a bandeira vigente |
-| Tarifa_Historico → Consumo_Historico | 1:N (opcional) | Cada mês registra qual tarifa foi usada no cálculo |
-
 ### Dicionário de dados
 
-#### `distribuidora` ⚠️
-Distribuidoras de energia por estado (ex.: Equatorial Pará, PA). Colunas a conferir com o `schema.sql`.
+**`distribuidora`**: distribuidoras de energia por estado.
 
-#### `catalogo_aparelho` ⚠️
-Catálogo de aparelhos sugeridos (ex.: Geladeira, Cozinha, 150 W). Colunas a conferir com o `schema.sql`.
-
-#### `bandeira_tarifaria`
-| Coluna | Tipo | Restrições | Descrição |
+| Coluna | Tipo | Regras | Descrição |
 |---|---|---|---|
-| `tipo` | `TEXT` | PK, CHECK (`VERDE`, `AMARELA`, `VERMELHA_P1`, `VERMELHA_P2`) | Tipo da bandeira |
-| `nome` | `TEXT` | NOT NULL | Nome de exibição |
-| `adicional_por_kwh` | `NUMERIC(8,5)` | NOT NULL, `>= 0` | Adicional em R$/kWh |
-| `descricao` | `TEXT` | | Texto explicativo |
-| `updated_at` | `TIMESTAMPTZ` | default `now()` | Última alteração |
+| `id_distribuidora` | BIGINT | PK, identity | Identificador numerado pelo banco |
+| `nome` | TEXT | NOT NULL | Nome da distribuidora |
+| `uf` | CHAR(2) | NOT NULL | Estado (ex.: PA) |
 
-#### `usuario`
-| Coluna | Tipo | Restrições | Descrição |
+Restrição: `UNIQUE (nome, uf)`.
+
+**`catalogo_aparelho`**: aparelhos sugeridos para o usuário escolher.
+
+| Coluna | Tipo | Regras | Descrição |
 |---|---|---|---|
-| `id_usuario` | `UUID` | PK | Mesmo id do login no Supabase Auth |
-| `nome` | `TEXT` | | Nome do usuário |
-| `meta_kwh` | `NUMERIC(10,2)` | `>= 0` | Meta mensal de consumo (kWh) |
-| `id_distribuidora` | FK | `ON DELETE SET NULL` | Distribuidora que atende o usuário |
-| `created_at`, `updated_at` | `TIMESTAMPTZ` | | Controle de criação e alteração |
+| `id_catalogo` | BIGINT | PK, identity | Identificador |
+| `nome` | TEXT | NOT NULL, UNIQUE | Nome do aparelho |
+| `categoria` | TEXT | opcional | Ex.: Cozinha, Climatização |
+| `potencia_w` | NUMERIC(10,2) | NOT NULL, > 0 | Potência típica em watts |
+| `horas_uso_sugerido` | NUMERIC(4,1) | 0 a 24 | Horas de uso por dia sugeridas |
 
-#### `tarifa_historico`
-| Coluna | Tipo | Restrições | Descrição |
+**`bandeira_tarifaria`**: as 4 bandeiras da ANEEL.
+
+| Coluna | Tipo | Regras | Descrição |
 |---|---|---|---|
-| `id_tarifa` | identity | PK | Identificador |
-| `id_distribuidora` | FK | `ON DELETE CASCADE` | Distribuidora da tarifa |
-| `tarifa_base_kwh` | `NUMERIC(8,5)` | `>= 0` | Tarifa base em R$/kWh |
-| `vigencia_inicio` | `DATE` | | Início da vigência |
-| `vigencia_fim` | `DATE` | NULL = em vigor; `fim >= início` | Fim da vigência |
-| `created_at`, `updated_at` | `TIMESTAMPTZ` | | Controle de criação e alteração |
+| `tipo` | TEXT | PK, CHECK | `VERDE`, `AMARELA`, `VERMELHA_P1` ou `VERMELHA_P2` |
+| `nome` | TEXT | NOT NULL | Nome exibido |
+| `adicional_por_kwh` | NUMERIC(8,5) | NOT NULL, >= 0 | Adicional em R$/kWh |
+| `descricao` | TEXT | opcional | Explicação da bandeira |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, default `now()` | Última alteração (automática) |
 
-#### `aparelho_usuario`
-| Coluna | Tipo | Restrições | Descrição |
+**`usuario`**: perfil de quem usa o app. Login, e-mail e senha ficam no Supabase Auth, não aqui.
+
+| Coluna | Tipo | Regras | Descrição |
 |---|---|---|---|
-| `id_aparelho` | `UUID` | PK, default `gen_random_uuid()` | Identificador |
-| `id_usuario` | FK | `ON DELETE CASCADE` | Dono do aparelho |
-| `id_catalogo` | FK | `ON DELETE SET NULL` | Item do catálogo usado como base |
-| `nome_personalizado` | `TEXT` | | Nome dado pelo usuário |
-| `potencia_w` | `NUMERIC(10,2)` | `> 0` | Potência (W) |
-| `horas_uso_diario` | `NUMERIC(4,1)` | entre 0 e 24 | Horas de uso por dia |
-| `created_at`, `updated_at` | `TIMESTAMPTZ` | | Controle de criação e alteração |
+| `id_usuario` | UUID | PK; no Supabase, FK para `auth.users` (CASCADE) | Mesmo id da conta de login |
+| `nome` | TEXT | NOT NULL | Nome do usuário |
+| `meta_kwh` | NUMERIC(10,2) | >= 0, opcional | Meta mensal de consumo |
+| `id_distribuidora` | BIGINT | FK, ON DELETE SET NULL, opcional | Distribuidora do usuário |
+| `created_at`, `updated_at` | TIMESTAMPTZ | NOT NULL, default `now()` | Controle e sincronização |
 
-#### `consumo_historico`
-| Coluna | Tipo | Restrições | Descrição |
+**`tarifa_historico`**: tarifa base de cada distribuidora ao longo do tempo.
+
+| Coluna | Tipo | Regras | Descrição |
 |---|---|---|---|
-| `id_consumo` | identity | PK | Identificador |
-| `id_usuario` | FK | `ON DELETE CASCADE` | Usuário do registro |
-| `mes_referencia` | `DATE` | sempre dia 1 | Mês de referência |
-| `consumo_kwh` | `NUMERIC(10,2)` | `>= 0` | Consumo no mês (kWh) |
-| `custo_total` | `NUMERIC(10,2)` | `>= 0` | Custo da fatura (R$) |
-| `tipo_bandeira` | FK | | Bandeira vigente no mês |
-| `id_tarifa` | FK | `ON DELETE SET NULL` | Tarifa usada no cálculo |
-| `created_at`, `updated_at` | `TIMESTAMPTZ` | | Controle de criação e alteração |
+| `id_tarifa` | BIGINT | PK, identity | Identificador |
+| `id_distribuidora` | BIGINT | FK NOT NULL, ON DELETE CASCADE | Distribuidora |
+| `tarifa_base_kwh` | NUMERIC(8,5) | NOT NULL, >= 0 | Tarifa base em R$/kWh |
+| `vigencia_inicio` | DATE | NOT NULL | Início da vigência |
+| `vigencia_fim` | DATE | opcional | Fim da vigência (vazio = em vigor) |
+| `created_at`, `updated_at` | TIMESTAMPTZ | NOT NULL, default `now()` | Controle e sincronização |
 
-`UNIQUE (id_usuario, mes_referencia)` impede dois registros do mesmo mês para o mesmo usuário.
+Restrição: `CHECK (vigencia_fim >= vigencia_inicio)`.
 
-### Regras de negócio
+**`aparelho_usuario`**: aparelhos cadastrados por cada usuário.
 
-- **Consumo mensal do aparelho (kWh)** = `potencia_w × horas_uso_diario × dias_no_mês ÷ 1000`
-- **Custo estimado (R$)** = `consumo_kwh × (tarifa_base + adicional da bandeira)`, acrescido de tributos. O ICMS ainda é calculado no app (decisão em aberto).
-- Valores monetários e tarifas usam `NUMERIC(p,s)`, e não `FLOAT`, para evitar erros de arredondamento.
-- O **ranking dos "vilões"** é calculado pela participação percentual de cada aparelho no consumo total do usuário.
-- **Senhas não ficam em tabelas do projeto**: o login é feito pelo Supabase Auth.
+| Coluna | Tipo | Regras | Descrição |
+|---|---|---|---|
+| `id_aparelho` | UUID | PK, default `gen_random_uuid()` | Pode ser gerado no app, mesmo offline |
+| `id_usuario` | UUID | FK NOT NULL, ON DELETE CASCADE | Dono do aparelho |
+| `id_catalogo` | BIGINT | FK, ON DELETE SET NULL, opcional | Aparelho do catálogo que originou este |
+| `nome_personalizado` | TEXT | NOT NULL | Nome dado pelo usuário |
+| `potencia_w` | NUMERIC(10,2) | NOT NULL, > 0 | Potência em watts (valor próprio, independe do catálogo) |
+| `horas_uso_diario` | NUMERIC(4,1) | NOT NULL, 0 a 24 | Horas de uso por dia (aceita decimal) |
+| `created_at`, `updated_at` | TIMESTAMPTZ | NOT NULL, default `now()` | Controle e sincronização |
 
-### Convenções
+**`consumo_historico`**: consumo e custo de cada mês, por usuário.
 
-- Nomes de tabelas e colunas em `snake_case`
-- Chaves primárias numéricas: `GENERATED ALWAYS AS IDENTITY`; usuários e aparelhos do usuário usam `UUID`
-- Datas e horas com fuso: `TIMESTAMPTZ`
-- Colunas `updated_at` preenchidas por trigger, para apoiar a sincronização com o Room
+| Coluna | Tipo | Regras | Descrição |
+|---|---|---|---|
+| `id_consumo` | BIGINT | PK, identity | Identificador |
+| `id_usuario` | UUID | FK NOT NULL, ON DELETE CASCADE | Usuário |
+| `mes_referencia` | DATE | NOT NULL, dia = 1 | Mês de referência (sempre o dia 1) |
+| `consumo_kwh` | NUMERIC(10,2) | NOT NULL, >= 0 | Consumo do mês |
+| `custo_total` | NUMERIC(10,2) | NOT NULL, >= 0 | Custo do mês, congelado na época |
+| `tipo_bandeira` | TEXT | FK NOT NULL | Bandeira vigente no mês |
+| `id_tarifa` | BIGINT | FK, ON DELETE SET NULL, opcional | Tarifa aplicada |
+| `created_at`, `updated_at` | TIMESTAMPTZ | NOT NULL, default `now()` | Controle e sincronização |
 
-### Scripts
+Restrição: `UNIQUE (id_usuario, mes_referencia)` (um registro por usuário em cada mês).
 
-```
-database/
-├── schema.sql   # estrutura: DROP TABLE e CREATE TABLE
-└── seed.sql     # dados iniciais: distribuidoras, bandeiras, tarifas, catálogo
-```
+### Decisões de modelagem
 
-Para recriar o banco em um PostgreSQL local (o `schema.sql` deve rodar antes do `seed.sql`):
+- **`NUMERIC` e não `FLOAT`** para tarifa, potência e dinheiro: valor exato, sem erro de arredondamento.
+- **UUID** nos dados que podem nascer no app sem internet (`usuario`, `aparelho_usuario`); **números identity** nos dados criados no servidor.
+- **`ON DELETE`**: `CASCADE` quando o filho não faz sentido sem o pai (aparelhos e consumos de um usuário); `SET NULL` quando o filho existe por conta própria (usuário sem distribuidora, consumo sem tarifa); bandeira em uso não pode ser apagada.
+- **Dados repetidos de propósito**: `aparelho_usuario.potencia_w` e `consumo_historico.custo_total` guardam o valor do momento, para o histórico não mudar quando o catálogo ou a tarifa mudarem.
+- **`updated_at` automático** por trigger em toda alteração, usado pelo app para sincronizar mudanças (cache offline com Room).
+- **Índices** nas chaves estrangeiras.
 
-```bash
-psql -U postgres -d energia_teste -f database/schema.sql
-psql -U postgres -d energia_teste -f database/seed.sql
-```
+### Segurança (Row Level Security)
 
-No Supabase, os mesmos arquivos podem ser executados pelo SQL Editor.
-### Regras de negócio
+O RLS está ligado em todas as tabelas. Sem política escrita, o acesso é negado.
 
-- **Consumo mensal do aparelho (kWh)** = `potencia_w × horas_uso_diario × dias_no_mês ÷ 1000`
-- **Custo estimado (R$)** = `consumo_kwh × (TE + TUSD)`, acrescido da bandeira tarifária e dos tributos (ICMS, PIS e COFINS).
-- Os valores monetários usam `NUMBER(p,s)`, e não `FLOAT`, para evitar erros de arredondamento.
-- O **ranking dos "vilões"** é calculado pela participação percentual de cada aparelho no consumo total do usuário.
+| Tabelas | Quem acessa | O quê |
+|---|---|---|
+| `distribuidora`, `catalogo_aparelho`, `bandeira_tarifaria`, `tarifa_historico` | Usuário logado | Só leitura |
+| `usuario` | Usuário logado | Ler, criar e editar apenas a própria linha |
+| `aparelho_usuario`, `consumo_historico` | Usuário logado | Ler, criar, editar e apagar apenas as próprias linhas |
 
-### Convenções
+O perfil em `usuario` é criado automaticamente por um trigger quando a conta é criada no Supabase Auth. O app deve enviar o nome no metadado `nome` do cadastro (`signUp`).
 
-- Chaves primárias: `NUMBER GENERATED ALWAYS AS IDENTITY`
-- Nomes de tabelas e colunas em `snake_case` (o Oracle armazena em maiúsculas)
-- Constraints nomeadas: `PK_<tabela>`, `FK_<tabela>_<referência>`, `UK_<tabela>_<coluna>`
+### Conexão do app
 
-### Scripts
+O app usa a **URL do projeto** e a chave **publishable** do Supabase. Essas informações ficam no `local.properties` (fora do Git). A chave **secret** e a senha do banco nunca entram no app nem no repositório.
 
-```
-database/
-├── 01_tabelas.sql        # CREATE TABLE + constraints
-├── 02_indices.sql        # Índices
-└── 03_carga_inicial.sql  # Distribuidoras, catálogo e tarifas iniciais
-```
-
-Para executar em um Oracle XE local (por exemplo, via SQLcl ou SQL*Plus):
-
-```sql
-@database/01_tabelas.sql
-@database/02_indices.sql
-@database/03_carga_inicial.sql
-```
-
----
 
 ## 🎨 Guia de Estilo (UI)
 
