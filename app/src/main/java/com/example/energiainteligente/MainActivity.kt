@@ -39,11 +39,16 @@ class MainActivity : ComponentActivity() {
 fun AppNavigation() {
     val context = LocalContext.current
     val navController = rememberNavController()
+    val coroutineScope = rememberCoroutineScope()
 
     // Inicializando o Banco de Dados e Repositório do Room
     val database = remember { AppDatabase.getDatabase(context) }
     val repository = remember { AparelhoRepository(database.aparelhoDao()) }
-    val coroutineScope = rememberCoroutineScope()
+
+    val sessionManager = remember { com.example.energiainteligente.security.SessionManager(context) }
+    val authRepository = remember { com.example.energiainteligente.repository.AuthRepository(sessionManager, com.example.energiainteligente.network.SupabaseNetwork) }
+
+    val startDestination = if (authRepository.isUsuarioLogado()) Screen.Home.route else Screen.Login.route
 
     // Observa o Flow do Banco de Dados em tempo real (se o banco mudar, a tela atualiza automaticamente)
     val listaAparelhos by repository.listarMeusAparelhos().collectAsState(initial = emptyList())
@@ -52,15 +57,17 @@ fun AppNavigation() {
         navController = navController,
         startDestination = Screen.Login.route
     ) {
-        // ... (Telas Login e Cadastro inalteradas)
+
         composable(Screen.Login.route) {
             LoginScreen(
+                authRepository = authRepository,
                 onLoginSuccess = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } },
                 onNavigateToCadastro = { navController.navigate(Screen.Cadastro.route) }
             )
         }
         composable(Screen.Cadastro.route) {
             CadastroScreen(
+                authRepository = authRepository,
                 onCadastroSuccess = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } },
                 onNavigateToLogin = { navController.popBackStack() }
             )
@@ -77,7 +84,7 @@ fun AppNavigation() {
             CalculadoraScreen(
                 onAparelhoAdicionado = { novoAparelho ->
                     coroutineScope.launch {
-                        // Salva permanentemente no banco SQLite (Room)
+
                         repository.salvarAparelho(novoAparelho)
                         navController.popBackStack()
                     }
