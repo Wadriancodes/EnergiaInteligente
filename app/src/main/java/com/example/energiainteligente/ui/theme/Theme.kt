@@ -15,7 +15,7 @@ private val DarkColorScheme = darkColorScheme(
     surface = DarkCardBackground,
     onSurface = TextPrimary,
     onSurfaceVariant = TextSecondary,
-    outline = DarkCardBorder
+    outline = DarkCardBorder,
 )
 
 @Composable

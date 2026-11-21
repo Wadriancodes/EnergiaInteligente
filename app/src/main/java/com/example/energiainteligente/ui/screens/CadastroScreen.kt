@@ -24,19 +24,28 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.energiainteligente.repository.AuthRepository
+import kotlinx.coroutines.launch
 
 @Composable
 fun CadastroScreen(
+    authRepository: AuthRepository,
     onCadastroSuccess: () -> Unit,
     onNavigateToLogin: () -> Unit
 ) {
+    var coroutineScope = rememberCoroutineScope()
+
     var nome by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    val regexEmail = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$")
     var senha by remember { mutableStateOf("") }
     var confirmarSenha by remember { mutableStateOf("") }
 
     var senhaVisivel by remember { mutableStateOf(false) }
     var confirmarSenhaVisivel by remember { mutableStateOf(false) }
+
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
@@ -154,6 +163,7 @@ fun CadastroScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+
                 )
             }
 
@@ -251,21 +261,68 @@ fun CadastroScreen(
                 )
             }
 
+            if (errorMessage != null){
+                Text(
+                    text = errorMessage!!,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
 
             // Botão Criar conta em Verde Neon
             Button(
-                onClick = onCadastroSuccess,
+                onClick = {
+                    if(senha != confirmarSenha){
+                        errorMessage = "As senhas não coincidem"
+                        return@Button
+                    }
+                    if(regexEmail.matches(email)){
+                        errorMessage = "E-mail inválido"
+                        return@Button
+                    }
+                    // Verificar se o email já está cadastrado
+                    if (email.isEmpty() || senha.isEmpty() || confirmarSenha.isEmpty() || nome.isEmpty()){
+                        errorMessage = "Preencha todos os campos"
+                        return@Button
+                    }
+                    if (senha.length < 6){
+                        errorMessage = "A senha deve ter no mínimo 6 caracteres"
+                        return@Button
+                    }
+
+                    isLoading = true
+                    errorMessage = null
+
+                    coroutineScope.launch {
+                        val result = authRepository.cadastrarUsuario(nome, email, senha)
+                        isLoading = false
+                        if (result.isSuccess) {
+                            onCadastroSuccess()
+                        } else if (result.exceptionOrNull()?.message == "E-mail já cadastrado"){
+                            errorMessage = "email já cadastrado"
+                        } else {
+                            errorMessage = result.exceptionOrNull()?.message ?: "Erro desconhecido"
+                        }
+                    }
+                },
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
+                    .fillMaxWidth().height(54.dp),
+                enabled = !isLoading
             ) {
-                Text("Criar conta", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else {
+                    Text("Criar conta", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
 
             Spacer(modifier = Modifier.height(20.dp))

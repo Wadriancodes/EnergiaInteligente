@@ -1,3 +1,8 @@
+// Sobrescreve as variáveis do Windows em tempo real para o Android Studio
+System.setProperty("android.prefs.root", "C:/Users/WINDOWS/.android")
+System.setProperty("android.overridePathCheck", "true")
+System.clearProperty("ANDROID_PREFS_ROOT")
+
 pluginManagement {
     repositories {
         google {

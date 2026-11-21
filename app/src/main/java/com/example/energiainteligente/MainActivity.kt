@@ -5,16 +5,23 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.energiainteligente.database.AppDatabase
 import com.example.energiainteligente.ui.screens.CadastroScreen
 import com.example.energiainteligente.ui.screens.CalculadoraScreen
 import com.example.energiainteligente.ui.screens.HomeScreen
 import com.example.energiainteligente.ui.screens.LoginScreen
 import com.example.energiainteligente.ui.theme.EnergiaInteligenteTheme
+import kotlin.collections.emptyList
+
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,64 +37,59 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppNavigation() {
+    val context = LocalContext.current
     val navController = rememberNavController()
+    val coroutineScope = rememberCoroutineScope()
 
-    val listaAparelhos = remember {
-        mutableStateListOf<Aparelho>()
-    }
+    // Inicializando o Banco de Dados e Repositório do Room
+    val database = remember { AppDatabase.getDatabase(context) }
+    val repository = remember { AparelhoRepository(database.aparelhoDao()) }
+
+    val sessionManager = remember { com.example.energiainteligente.security.SessionManager(context) }
+    val authRepository = remember { com.example.energiainteligente.repository.AuthRepository(sessionManager, com.example.energiainteligente.network.SupabaseNetwork) }
+
+    val startDestination = if (authRepository.isUsuarioLogado()) Screen.Home.route else Screen.Login.route
+
+    // Observa o Flow do Banco de Dados em tempo real (se o banco mudar, a tela atualiza automaticamente)
+    val listaAparelhos by repository.listarMeusAparelhos().collectAsState(initial = emptyList())
 
     NavHost(
         navController = navController,
         startDestination = Screen.Login.route
     ) {
-        // 1. Tela de Login
+
         composable(Screen.Login.route) {
             LoginScreen(
-                onLoginSuccess = {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                },
-                onNavigateToCadastro = {
-                    navController.navigate(Screen.Cadastro.route)
-                }
+                authRepository = authRepository,
+                onLoginSuccess = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } },
+                onNavigateToCadastro = { navController.navigate(Screen.Cadastro.route) }
             )
         }
-
-        // 2. Tela de Cadastro
         composable(Screen.Cadastro.route) {
             CadastroScreen(
-                onCadastroSuccess = {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                },
-                onNavigateToLogin = {
-                    navController.popBackStack()
-                }
+                authRepository = authRepository,
+                onCadastroSuccess = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Login.route) { inclusive = true } } },
+                onNavigateToLogin = { navController.popBackStack() }
             )
         }
 
-        // 3. Tela Home (Dashboard & Aparelhos)
         composable(Screen.Home.route) {
             HomeScreen(
                 aparelhos = listaAparelhos,
-                onAdicionarAparelhoClick = {
-                    navController.navigate(Screen.calculadora.route)
-                }
+                onAdicionarAparelhoClick = { navController.navigate(Screen.calculadora.route) }
             )
         }
 
-        // 4. Tela Calculadora (Novo Aparelho)
         composable(Screen.calculadora.route) {
             CalculadoraScreen(
                 onAparelhoAdicionado = { novoAparelho ->
-                    listaAparelhos.add(novoAparelho)
-                    navController.popBackStack()
+                    coroutineScope.launch {
+
+                        repository.salvarAparelho(novoAparelho)
+                        navController.popBackStack()
+                    }
                 },
-                onBackClick = {
-                    navController.popBackStack()
-                }
+                onBackClick = { navController.popBackStack() }
             )
         }
     }

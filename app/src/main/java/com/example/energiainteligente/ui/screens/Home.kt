@@ -47,12 +47,12 @@ fun HomeScreen(
     // Requisição em background para buscar dados da API ANEEL
     LaunchedEffect(Unit) {
         bandeira = repository.obterBandeiraVigente()
-        tarifa = repository.obterTarifaPorUF("PA")
+        tarifa = repository.obterTarifaPorUF()
     }
 
     val consumoTotalKWh = aparelhos.sumOf { it.consumoMensalKWh }
     val custoTotalEst = aparelhos.sumOf {
-        it.calcularCustoMensal(tarifa.tarifaBaseKWh, bandeira.adicionalPorKWh)
+        it.calcularCustoMensal(tarifa, bandeira.adicionalPorKWh)
     }
 
     val ptBr = Locale("pt", "BR")
@@ -302,7 +302,7 @@ fun HomeScreen(
 
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text(
-                                        text = String.format(ptBr, "R$ %.2f", aparelho.calcularCustoMensal(tarifa.tarifaBaseKWh, bandeira.adicionalPorKWh)),
+                                        text = String.format(ptBr, "R$ %.2f", aparelho.calcularCustoMensal(tarifa, bandeira.adicionalPorKWh)),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp,
                                         color = MaterialTheme.colorScheme.primary
