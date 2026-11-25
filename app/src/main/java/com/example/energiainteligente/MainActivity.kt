@@ -18,7 +18,6 @@ import com.example.energiainteligente.ui.screens.HomeScreen
 import com.example.energiainteligente.ui.screens.LoginScreen
 import com.example.energiainteligente.ui.theme.EnergiaInteligenteTheme
 import kotlin.collections.emptyList
-
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import kotlinx.coroutines.launch
@@ -48,14 +47,14 @@ fun AppNavigation() {
     val sessionManager = remember { com.example.energiainteligente.security.SessionManager(context) }
     val authRepository = remember { com.example.energiainteligente.repository.AuthRepository(sessionManager, com.example.energiainteligente.network.SupabaseNetwork) }
 
-    val startDestination = if (authRepository.isUsuarioLogado()) Screen.Home.route else Screen.Login.route
+    val startDest = if (authRepository.isUsuarioLogado()) Screen.Home.route else Screen.Login.route
 
     // Observa o Flow do Banco de Dados em tempo real (se o banco mudar, a tela atualiza automaticamente)
     val listaAparelhos by repository.listarMeusAparelhos().collectAsState(initial = emptyList())
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Login.route
+        startDestination = startDest
     ) {
 
         composable(Screen.Login.route) {
@@ -76,7 +75,15 @@ fun AppNavigation() {
         composable(Screen.Home.route) {
             HomeScreen(
                 aparelhos = listaAparelhos,
-                onAdicionarAparelhoClick = { navController.navigate(Screen.calculadora.route) }
+                onAdicionarAparelhoClick = { navController.navigate(Screen.calculadora.route) },
+                onLogout = { 
+                    coroutineScope.launch {
+                        authRepository.realizarLogout()
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(Screen.Home.route) { inclusive = true }
+                        }
+                    }
+                }
             )
         }
 
