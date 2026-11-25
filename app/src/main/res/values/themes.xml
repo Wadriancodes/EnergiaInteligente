@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.EnergiaInteligente" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.EnergiaInteligente" parent="android:Theme.Material.NoActionBar">
+        <!-- Força a janela (Splash Screen inicial) a ser preta -->
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+    </style>
 </resources>
