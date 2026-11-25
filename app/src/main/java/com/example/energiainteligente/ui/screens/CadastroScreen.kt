@@ -278,7 +278,7 @@ fun CadastroScreen(
                         errorMessage = "As senhas não coincidem"
                         return@Button
                     }
-                    if(regexEmail.matches(email)){
+                    if(!regexEmail.matches(email)){
                         errorMessage = "E-mail inválido"
                         return@Button
                     }
@@ -323,6 +323,7 @@ fun CadastroScreen(
                     )
                 } else {
                     Text("Criar conta", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))

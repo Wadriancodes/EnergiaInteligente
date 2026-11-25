@@ -22,18 +22,24 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.energiainteligente.repository.AuthRepository
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
+    authRepository: AuthRepository,
     onLoginSuccess: () -> Unit,
     onNavigateToCadastro: () -> Unit
 ) {
+    val coroutineScope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
     var senha by remember { mutableStateOf("") }
     var senhaVisivel by remember { mutableStateOf(false) }
 
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showRecuperarSenhaDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
@@ -177,25 +183,51 @@ fun LoginScreen(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .align(Alignment.End)
-                        .clickable { }
+                        .clickable { showRecuperarSenhaDialog = true }
+                )
+            }
+
+            if (errorMessage != null){
+                Text(
+                    text = errorMessage!!,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(vertical = 16.dp)
                 )
             }
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Botão Entrar em Verde Neon
+            // Botão Entrar
             Button(
-                onClick = onLoginSuccess,
+                onClick = {
+                    if (email.isEmpty() || senha.isEmpty()) {
+                        errorMessage = "Preencha e-mail e senha."
+                        return@Button
+                    }
+
+                    isLoading = true
+                    errorMessage = null
+
+                    coroutineScope.launch {
+                        val result = authRepository.realizarLogin(email, senha)
+                        isLoading = false
+                        if (result.isSuccess) {
+                            onLoginSuccess()
+                        } else {
+                            errorMessage = result.exceptionOrNull()?.message ?: "Erro ao entrar."
+                        }
+                    }
+                },
                 shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                enabled = !isLoading
             ) {
-                Text("Entrar", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                if (isLoading) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                } else {
+                    Text("Entrar", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
             }
 
             Spacer(modifier = Modifier.height(28.dp))
@@ -218,5 +250,92 @@ fun LoginScreen(
                 )
             }
         }
+    }
+
+    if (showRecuperarSenhaDialog) {
+        var emailRecuperacao by remember { mutableStateOf("") }
+        var isEnviando by remember { mutableStateOf(false) }
+        var mensagemSucesso by remember { mutableStateOf<String?>(null) }
+        var erroRecuperacao by remember { mutableStateOf<String?>(null) }
+
+        AlertDialog(
+            onDismissRequest = { showRecuperarSenhaDialog = false },
+            title = {
+                Text(text = "Recuperar Senha", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+            },
+            text = {
+                Column {
+                    if (mensagemSucesso != null) {
+                        Text(
+                            text = mensagemSucesso!!,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 14.sp
+                        )
+                    } else {
+                        Text(
+                            text = "Digite o e-mail cadastrado. Enviaremos um link para você redefinir sua senha.",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = emailRecuperacao,
+                            onValueChange = { emailRecuperacao = it },
+                            label = { Text("E-mail") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                        )
+                        if (erroRecuperacao != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = erroRecuperacao!!,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (mensagemSucesso == null) {
+                    Button(
+                        onClick = {
+                            if (emailRecuperacao.isNotEmpty()) {
+                                isEnviando = true
+                                erroRecuperacao = null
+                                coroutineScope.launch {
+                                    val result = authRepository.enviarEmailRecuperacao(emailRecuperacao)
+                                    isEnviando = false
+                                    result.onSuccess {
+                                        mensagemSucesso = "E-mail de recuperação enviado com sucesso! Verifique sua caixa de entrada."
+                                    }.onFailure {
+                                        erroRecuperacao = it.message
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !isEnviando
+                    ) {
+                        if (isEnviando) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                        } else {
+                            Text("Enviar")
+                        }
+                    }
+                } else {
+                    Button(onClick = { showRecuperarSenhaDialog = false }) {
+                        Text("OK")
+                    }
+                }
+            },
+            dismissButton = {
+                if (mensagemSucesso == null) {
+                    TextButton(onClick = { showRecuperarSenhaDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            }
+        )
     }
 }

@@ -34,9 +34,14 @@ class AuthRepository(private val sessionManager: SessionManager, private val sup
             }
             Result.success(true)
         } catch (e: Exception) {
-            // Ex: E-mail já cadastrado, formato inválido, etc.
             e.printStackTrace()
-            Result.failure(Exception("Falha ao criar conta: ${e.message}"))
+            // Captura o erro específico do Supabase para e-mail já existente
+            val msg = e.message ?: ""
+            if (msg.contains("already registered", ignoreCase = true) || msg.contains("User already exists", ignoreCase = true)) {
+                Result.failure(Exception("E-mail já cadastrado"))
+            } else {
+                Result.failure(Exception("Falha ao criar conta: $msg"))
+            }
         }
     }
 
@@ -64,6 +69,17 @@ class AuthRepository(private val sessionManager: SessionManager, private val sup
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure(Exception("E-mail ou senha incorretos."))
+        }
+    }
+
+    // Função de RECUPERAÇÃO DE SENHA (Forgot Password)
+    suspend fun enviarEmailRecuperacao(email: String): Result<Boolean> {
+        return try {
+            SupabaseNetwork.auth.resetPasswordForEmail(email)
+            Result.success(true)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(Exception("Erro ao enviar e-mail de recuperação."))
         }
     }
 }
