@@ -14,7 +14,8 @@ class AparelhoRepository(private val aparelhoDao: AparelhoDao) {
                     id = entity.idAparelho,
                     nome = entity.nomePersonalizado,
                     potenciaWatts = entity.potenciaWatts,
-                    horasPorDia = entity.horasPorDia
+                    horasPorDia = entity.horasPorDia,
+                    icone = entity.icone
                 )
             }
         }
@@ -25,7 +26,8 @@ class AparelhoRepository(private val aparelhoDao: AparelhoDao) {
             idAparelho = aparelho.id,
             nomePersonalizado = aparelho.nome,
             potenciaWatts = aparelho.potenciaWatts,
-            horasPorDia = aparelho.horasPorDia
+            horasPorDia = aparelho.horasPorDia,
+            icone = aparelho.icone
         )
         aparelhoDao.inserirAparelho(entity)
     }

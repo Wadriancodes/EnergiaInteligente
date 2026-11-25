@@ -10,7 +10,7 @@ import com.example.energiainteligente.database.entity.DistribuidoraEntity
 
 @Database(
     entities = [AparelhoEntity::class, DistribuidoraEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,7 +26,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "energia_inteligente_db"
-                ).build()
+                ).fallbackToDestructiveMigration().build()
                 INSTANCE = instance
                 instance
             }

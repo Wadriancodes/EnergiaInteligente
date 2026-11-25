@@ -25,5 +25,8 @@ data class AparelhoEntity(
     val potenciaWatts: Double,
     
     @ColumnInfo(name = "horas_uso_diario")
-    val horasPorDia: Double
+    val horasPorDia: Double,
+    
+    @ColumnInfo(name = "icone")
+    val icone: String = "power"
 )
